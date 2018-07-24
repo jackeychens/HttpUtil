@@ -1,0 +1,108 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 23
+    buildToolsVersion "23.0.2"
+    lintOptions{
+        abortOnError false
+    }
+    defaultConfig {
+        minSdkVersion 18
+        targetSdkVersion 23
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+//
+task clearJar(type: Delete) {
+    delete 'build/outputs/httplib.jar'
+}
+
+task makeJar(type: Copy) {
+    from('build/intermediates/bundles/release/')
+    into('build/outputs/')
+    include('classes.jar')
+    rename ('classes.jar', 'httplib.jar')
+}
+
+makeJar.dependsOn(clearJar, build)
+
+dependencies {
+    compile fileTree(include: ['*.jar'], dir: 'libs')
+    testCompile 'junit:junit:4.12'
+    compile 'com.android.support:appcompat-v7:23.4.0'
+    compile 'com.squareup.okhttp3:okhttp:3.3.1'
+    compile 'com.squareup.okio:okio:1.8.0'
+    compile 'com.google.code.gson:gson:2.7'
+    compile 'com.loopj.android:android-async-http:1.4.9'
+}
+//dependsOn 可根据实际需要增加或更改
+task buildJar(type: Jar) {
+
+    appendix = "demo"
+    baseName = "androidJar"
+    version = "1.0.0"
+    classifier = "release"
+
+    //后缀名
+    extension = "jar"
+    //最终的 Jar 包名，如果没设置，默认为 [baseName]-[appendix]-[version]-[classifier].[extension]
+    archiveName = "httpModule.jar"
+
+    //需打包的资源所在的路径集
+    def srcClassDir = [project.buildDir.absolutePath + "/intermediates/classes/release"];
+    //初始化资源路径集
+    from srcClassDir
+
+    //去除路径集下部分的资源
+//    exclude "org/chaos/demo/jar/MainActivity.class"
+//    exclude "org/chaos/demo/jar/MainActivity\$*.class"
+//    exclude "org/chaos/demo/jar/BuildConfig.class"
+//    exclude "org/chaos/demo/jar/BuildConfig\$*.class"
+//    exclude "**/R.class"
+//    exclude "**/R\$*.class"
+
+    //只导入资源路径集下的部分资源
+    include "com/httpmodule/**/*.class"
+
+    //注: exclude include 支持可变长参数
+}
+
+task proguardJar(dependsOn: ['buildJar'], type: proguard.gradle.ProGuardTask) {
+    //Android 默认的 proguard 文件
+    configuration android.getDefaultProguardFile('proguard-android.txt')
+    //会根据该文件对 Jar 进行混淆，注意：需要在 manifest 注册的组件也要加入该文件中
+    configuration 'proguard-rules.pro'
+
+    String inJar = buildJar.archivePath.getAbsolutePath()
+    //输入 jar
+    injars inJar
+    //输出 jar
+    outjars inJar.substring(0, inJar.lastIndexOf('/')) + "/proguard-${buildJar.archiveName}"
+
+    //设置不删除未引用的资源(类，方法等)
+    dontshrink
+
+    ApplicationPlugin appPlugin = getPlugins().findPlugin(ApplicationPlugin)
+    if (appPlugin != null) {
+        List<String> runtimeJarList
+        if (appPlugin.getMetaClass().getMetaMethod("getRuntimeJarList")) {
+            runtimeJarList = appPlugin.getRuntimeJarList()
+        } else if (android.getMetaClass().getMetaMethod("getBootClasspath")) {
+            runtimeJarList = android.getBootClasspath()
+        } else {
+            runtimeJarList = appPlugin.getBootClasspath()
+        }
+
+        for (String runtimeJar : runtimeJarList) {
+            //给 proguard 添加 runtime
+            libraryjars(runtimeJar)
+        }
+    }
+}
